@@ -181,7 +181,7 @@
         }
 
         .day {
-            aspect-ratio: 1;
+            height: clamp(80px, 10vw, 110px);
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             padding: 10px;
@@ -269,6 +269,7 @@
             color: #666;
             overflow: hidden;
             flex: 1;
+            min-height: 0;
             line-height: 1.3;
             max-height: 39px;
             line-clamp: 3;
@@ -602,6 +603,7 @@
             }
 
             .day {
+                height: 72px;
                 min-height: 60px;
                 padding: 8px;
             }
