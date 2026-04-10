@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carregar Férias - Calendário</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .vacation-list {
+            text-align: left;
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .vacation-list li {
+            margin-bottom: 10px;
+            color: #555;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+        a:hover {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📅 Carregar Férias Predefinidas</h1>
+        <p>As seguintes datas serão marcadas como férias:</p>
+        
+        <ul class="vacation-list">
+            <li><strong>8 a 12 de Junho</strong> (5 dias)</li>
+            <li><strong>10 a 14 de Agosto</strong> (5 dias)</li>
+            <li><strong>31 de Agosto a 11 de Setembro</strong> (12 dias)</li>
+            <li><strong>21 a 23 de Dezembro</strong> (3 dias)</li>
+        </ul>
+
+        <button onclick="loadVacations()">✅ Carregar Férias</button>
+        
+        <div id="status" class="status"></div>
+
+        <a href="index.html">Voltar ao Calendário</a>
+    </div>
+
+    <script>
+        function loadVacations() {
+            // Datas de férias em 2026
+            const vacationDates = [
+                // Junho 8-12
+                '2026-06-08', '2026-06-09', '2026-06-10', '2026-06-11', '2026-06-12',
+                // Agosto 10-14
+                '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14',
+                // Agosto 31 a Setembro 11
+                '2026-08-31',
+                '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05',
+                '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11',
+                // Dezembro 21-23
+                '2026-12-21', '2026-12-22', '2026-12-23'
+            ];
+
+            // Guarda no localStorage
+            localStorage.setItem('calendarVacations', JSON.stringify(vacationDates));
+
+            // Mostra mensagem de sucesso
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = `✅ Férias carregadas com sucesso! (${vacationDates.length} dias marcados)`;
+            statusEl.classList.add('success');
+
+            // Redireciona após 2 segundos
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
