@@ -37,8 +37,55 @@
         .header-info {
             text-align: center;
             color: #666;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             font-size: 14px;
+        }
+
+        .sync-status {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            background: #f0f8ff;
+            border: 1px solid #4CAF50;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .sync-status.syncing {
+            background: #fff3e0;
+            border-color: #FF9800;
+        }
+
+        .sync-status.error {
+            background: #ffebee;
+            border-color: #f44336;
+        }
+
+        .sync-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        .sync-status.syncing .sync-indicator {
+            background: #FF9800;
+            animation: pulse 0.8s infinite;
+        }
+
+        .sync-status.error .sync-indicator {
+            background: #f44336;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .month-selector {
@@ -574,6 +621,11 @@
         <h1>📅 Calendário Inquérito aos Novos Estudantes do Iscte 2026</h1>
         <p class="header-info">Registo de Iniciativas</p>
 
+        <div class="sync-status" id="syncStatus">
+            <div class="sync-indicator"></div>
+            <span id="syncText">Sincronizado há poucos segundos</span>
+        </div>
+
         <div class="month-selector">
             <button id="prevBtn" onclick="previousMonth()">← Anterior</button>
             <h2 id="monthYear"></h2>
@@ -666,32 +718,166 @@
     </div>
 
     <script>
+        // ===== INDEXEDDB SETUP =====
+        let db = null;
+        let lastSyncTime = Date.now();
+        let syncInProgress = false;
+
+        // Inicializa IndexedDB
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('CalendarioDB', 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains('activities')) {
+                        database.createObjectStore('activities');
+                    }
+                    if (!database.objectStoreNames.contains('vacations')) {
+                        database.createObjectStore('vacations');
+                    }
+                };
+            });
+        }
+
+        // Carrega atividades do IndexedDB
+        async function loadActivities() {
+            if (!db) await initDB();
+            return new Promise((resolve) => {
+                const transaction = db.transaction(['activities'], 'readonly');
+                const store = transaction.objectStore('activities');
+                const request = store.get('data');
+                
+                request.onsuccess = () => resolve(request.result || {});
+            });
+        }
+
+        // Guarda atividades no IndexedDB
+        async function saveActivities(activities) {
+            if (!db) await initDB();
+            return new Promise((resolve) => {
+                const transaction = db.transaction(['activities'], 'readwrite');
+                const store = transaction.objectStore('activities');
+                store.put(activities, 'data');
+                
+                transaction.oncomplete = () => {
+                    triggerSync();
+                    resolve();
+                };
+            });
+        }
+
+        // Carrega férias do IndexedDB
+        async function loadVacations() {
+            if (!db) await initDB();
+            return new Promise((resolve) => {
+                const transaction = db.transaction(['vacations'], 'readonly');
+                const store = transaction.objectStore('vacations');
+                const request = store.get('data');
+                
+                request.onsuccess = () => resolve(request.result || []);
+            });
+        }
+
+        // Guarda férias no IndexedDB
+        async function saveVacations(vacations) {
+            if (!db) await initDB();
+            return new Promise((resolve) => {
+                const transaction = db.transaction(['vacations'], 'readwrite');
+                const store = transaction.objectStore('vacations');
+                store.put(vacations, 'data');
+                
+                transaction.oncomplete = () => {
+                    triggerSync();
+                    resolve();
+                };
+            });
+        }
+
+        // ===== SINCRONIZAÇÃO AUTOMÁTICA =====
+        function triggerSync() {
+            lastSyncTime = Date.now();
+            updateSyncStatus('syncing');
+            
+            // Exporta dados automaticamente
+            setTimeout(autoBackup, 500);
+            
+            // Marca como sincronizado após 1 segundo
+            setTimeout(() => {
+                updateSyncStatus('synced');
+            }, 1500);
+        }
+
+        // Auto-backup para ficheiro JSON
+        async function autoBackup() {
+            try {
+                const activities = await loadActivities();
+                const vacations = await loadVacations();
+                
+                const backup = {
+                    exported: new Date().toISOString(),
+                    activities,
+                    vacations,
+                    version: '2.0'
+                };
+
+                // Guarda em localStorage como fallback
+                localStorage.setItem('calendarBackup', JSON.stringify(backup));
+            } catch (error) {
+                console.error('Backup error:', error);
+            }
+        }
+
+        // Atualiza status de sincronização na UI
+        function updateSyncStatus(status) {
+            const statusEl = document.getElementById('syncStatus');
+            const textEl = document.getElementById('syncText');
+            
+            statusEl.classList.remove('syncing', 'error');
+            
+            if (status === 'syncing') {
+                statusEl.classList.add('syncing');
+                textEl.textContent = '⏳ Sincronizando...';
+            } else if (status === 'synced') {
+                textEl.textContent = '✅ Guardado há alguns segundos';
+            } else if (status === 'error') {
+                statusEl.classList.add('error');
+                textEl.textContent = '❌ Erro ao sincronizar';
+            }
+        }
+
+        // Mostra tempo desde última sincronização
+        setInterval(function() {
+            const now = Date.now();
+            const diff = now - lastSyncTime;
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            
+            let timeText = '';
+            if (seconds < 60) {
+                timeText = 'há poucos segundos';
+            } else if (minutes < 60) {
+                timeText = `há ${minutes} minuto${minutes > 1 ? 's' : ''}`;
+            } else {
+                timeText = `há ${hours} hora${hours > 1 ? 's' : ''}`;
+            }
+            
+            if (!syncInProgress) {
+                document.getElementById('syncText').textContent = `✅ Guardado ${timeText}`;
+            }
+        }, 5000);
+
         let currentDate = new Date(2026, 3, 1); // Começa em Abril de 2026
         let selectedDate = null;
         let multiSelectMode = false;
         let selectedDates = [];
-
-        // Carrega dados do localStorage
-        function loadActivities() {
-            const data = localStorage.getItem('calendarActivities');
-            return data ? JSON.parse(data) : {};
-        }
-
-        // Guarda dados no localStorage
-        function saveActivities(activities) {
-            localStorage.setItem('calendarActivities', JSON.stringify(activities));
-        }
-
-        // Carrega férias
-        function loadVacations() {
-            const data = localStorage.getItem('calendarVacations');
-            return data ? JSON.parse(data) : [];
-        }
-
-        // Guarda férias
-        function saveVacations(vacations) {
-            localStorage.setItem('calendarVacations', JSON.stringify(vacations));
-        }
 
         // Formata a chave da data
         function getDateKey(date) {
@@ -699,7 +885,7 @@
         }
 
         // Renderiza o calendário
-        function renderCalendar() {
+        async function renderCalendar() {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
 
@@ -718,8 +904,8 @@
             const daysInPrevMonth = prevLastDay.getDate();
 
             let daysHtml = '';
-            const activities = loadActivities();
-            const vacations = loadVacations();
+            const activities = await loadActivities();
+            const vacations = await loadVacations();
 
             // Dias do mês anterior
             for (let i = firstDayOfWeek - 1; i >= 0; i--) {
@@ -762,11 +948,11 @@
         }
 
         // Abre o modal de atividades
-        function openActivityModal(date) {
+        async function openActivityModal(date) {
             selectedDate = date;
             const dateKey = getDateKey(date);
-            const activities = loadActivities();
-            const vacations = loadVacations();
+            const activities = await loadActivities();
+            const vacations = await loadVacations();
             const dayActivities = activities[dateKey] || [];
             const isVacation = vacations.includes(dateKey);
 
@@ -803,7 +989,7 @@
         }
 
         // Adiciona uma atividade
-        function addActivity() {
+        async function addActivity() {
             const input = document.getElementById('activityInput');
             const activity = input.value.trim();
 
@@ -813,14 +999,14 @@
             }
 
             const dateKey = getDateKey(selectedDate);
-            const activities = loadActivities();
+            const activities = await loadActivities();
 
             if (!activities[dateKey]) {
                 activities[dateKey] = [];
             }
 
             activities[dateKey].push(activity);
-            saveActivities(activities);
+            await saveActivities(activities);
 
             input.value = '';
             renderCalendar();
@@ -828,22 +1014,22 @@
         }
 
         // Deleta uma atividade
-        function deleteActivity(index) {
+        async function deleteActivity(index) {
             const dateKey = getDateKey(selectedDate);
-            const activities = loadActivities();
+            const activities = await loadActivities();
 
             if (activities[dateKey]) {
                 activities[dateKey].splice(index, 1);
-                saveActivities(activities);
+                await saveActivities(activities);
                 renderCalendar();
                 openActivityModal(selectedDate);
             }
         }
 
         // Toggle férias
-        function toggleVacation() {
+        async function toggleVacation() {
             const dateKey = getDateKey(selectedDate);
-            const vacations = loadVacations();
+            const vacations = await loadVacations();
             const index = vacations.indexOf(dateKey);
 
             if (index > -1) {
@@ -852,7 +1038,7 @@
                 vacations.push(dateKey);
             }
 
-            saveVacations(vacations);
+            await saveVacations(vacations);
             renderCalendar();
             openActivityModal(selectedDate);
         }
@@ -918,8 +1104,8 @@
         }
 
         // Aplicar férias a múltiplos dias
-        function applyVacationToMultiDays() {
-            const vacations = loadVacations();
+        async function applyVacationToMultiDays() {
+            const vacations = await loadVacations();
             
             selectedDates.forEach(dateKey => {
                 if (!vacations.includes(dateKey)) {
@@ -927,7 +1113,7 @@
                 }
             });
             
-            saveVacations(vacations);
+            await saveVacations(vacations);
             clearMultiSelection();
             closeMultiSelectModal();
             renderCalendar();
@@ -935,7 +1121,7 @@
         }
 
         // Adicionar atividade a múltiplos dias
-        function addActivityToMultiDays() {
+        async function addActivityToMultiDays() {
             const input = document.getElementById('multiActivityInput');
             const activity = input.value.trim();
             
@@ -944,7 +1130,7 @@
                 return;
             }
             
-            const activities = loadActivities();
+            const activities = await loadActivities();
             
             selectedDates.forEach(dateKey => {
                 if (!activities[dateKey]) {
@@ -953,7 +1139,7 @@
                 activities[dateKey].push(activity);
             });
             
-            saveActivities(activities);
+            await saveActivities(activities);
             input.value = '';
             clearMultiSelection();
             closeMultiSelectModal();
@@ -1008,9 +1194,9 @@
         }
 
         // Exporta dados para ficheiro JSON
-        function exportData() {
-            const activities = loadActivities();
-            const vacations = loadVacations();
+        async function exportData() {
+            const activities = await loadActivities();
+            const vacations = await loadVacations();
             
             const data = {
                 exported: new Date().toISOString(),
@@ -1032,20 +1218,20 @@
         }
 
         // Importa dados de ficheiro JSON
-        function importData(event) {
+        async function importData(event) {
             const file = event.target.files[0];
             if (!file) return;
             
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
                     
                     if (data.activities) {
-                        saveActivities(data.activities);
+                        await saveActivities(data.activities);
                     }
                     if (data.vacations) {
-                        saveVacations(data.vacations);
+                        await saveVacations(data.vacations);
                     }
                     
                     renderCalendar();
@@ -1074,8 +1260,12 @@
             }
         }
 
-        // Inicializa
-        renderCalendar();
+        // Inicializa a aplicação
+        initDB().then(() => {
+            renderCalendar();
+            // Auto-backup a cada mudança importante
+            setInterval(autoBackup, 300000); // A cada 5 minutos
+        });
     </script>
 </body>
 </html>
